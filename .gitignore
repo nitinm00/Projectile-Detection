@@ -1,0 +1,21 @@
+# ignore API keys file
+*.key
+
+# ignore cuda install keyrings
+*.deb*
+*.pin*
+
+# ignore test directory
+/LaserPointer
+/runs
+
+# ignore venv directories
+/OpenCV3.9
+/OpenCV3.9-clone
+/venv-dummy
+
+# ignore training images (over 2k images)
+/webcam_images
+
+# ignore datasets (webcam images labeled on roboflow)
+/datasets
