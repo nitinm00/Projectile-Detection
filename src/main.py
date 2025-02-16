@@ -16,19 +16,19 @@ cap = cv2.VideoCapture(0)
 
 plat = platform.system()
 
-if plat == "Windows":
-    PORT = "COM4"
-elif plat == "macOS":
-    # port = "/dev/tty.usbmodem6D8118A649481"
-    PORT = "/dev/tty.usbmodem144101"
-elif plat == "Linux":
-    PORT = "/dev/ttyUSB0"
+# if plat == "Windows":
+#     PORT = "COM4"
+# elif plat == "macOS":
+#     # port = "/dev/tty.usbmodem6D8118A649481"
+#     PORT = "/dev/tty.usbmodem144101"
+# elif plat == "Linux":
+#     PORT = "/dev/ttyUSB0"
 
-out = serial.Serial(PORT, baudrate=115200, timeout=1)
-print(out.name)
+# out = serial.Serial(PORT, baudrate=115200, timeout=1)
+# print(out.name)
 
-horiz_aspect = 1920
-vert_aspect = 1080
+horiz_aspect = 640
+vert_aspect = 480
 camera_diagonal_FOV = 78
 
 cap.set(cv2.CAP_PROP_FRAME_WIDTH, horiz_aspect)
@@ -45,15 +45,19 @@ vertical_FOV = 2 * np.arctan ( np.tan( np.deg2rad(camera_diagonal_FOV/2) * vert_
 h_scaling_factor = horizontal_FOV/180
 v_scaling_factor = vertical_FOV/180
 
-red_masks = []
+masks = {}
+masks['red'] = []
+masks['green'] = []
 
 lower_red = np.array([140,100,80])
 upper_red = np.array([190,255,255])
-red_masks.append((lower_red, upper_red))
+masks['red'].append([lower_red, upper_red])
 
-rn = len(red_masks)
+lower_green = np.array([40, 50, 50])
+upper_green = np.array([80, 255, 255])
+masks['green'].append([lower_green, upper_green])
 
-print("rn", rn)
+print(masks)
 
 if not cap.isOpened():
     print("could not open camera")
@@ -66,34 +70,34 @@ def apply_postprocessing(mask):
     
     return mask
     
-def get_color_mask(frame, index):
+def get_color_mask(frame, color):
 
     hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv, red_masks[index][0], red_masks[index][1])
+    mask = cv2.inRange(hsv, masks[color][0][0], masks[color][0][1])
         
     return hsv, mask
     
 def draw_rectangle(frame, tl_x, tl_y, w, h):
     cv2.rectangle(frame, (tl_x , tl_y) , (tl_x+ w, tl_y+h), (0, 255, 0), 2)
 
-def send_data(x, y):
-        # start = time.time_ns()
-        global start
-        if time.time_ns() - start > 15 * ms_to_ns:
-            out.write(b'X%dY%d\n' %(x,y))   
-            start = time.time_ns()
+# def send_data(x, y):
+#         # start = time.time_ns()
+#         global start
+#         if time.time_ns() - start > 15 * ms_to_ns:
+#             out.write(b'X%dY%d\n' %(x,y))   
+#             start = time.time_ns()
 
-def target(tl_x, tl_y, w, h):
-    # get center
-    cx = tl_x + 0.5 * w
-    cy = tl_y + 0.5 * h
+# def target(tl_x, tl_y, w, h):
+#     # get center
+#     cx = tl_x + 0.5 * w
+#     cy = tl_y + 0.5 * h
 
-    # translate to degrees
-    X = h_scaling_factor * (180 - (cx/horiz_aspect)*180)
-    Y = v_scaling_factor * (180 - (cy/vert_aspect)*180)
+#     # translate to degrees
+#     X = h_scaling_factor * (180 - (cx/horiz_aspect)*180)
+#     Y = v_scaling_factor * (180 - (cy/vert_aspect)*180)
 
-    send_data(X, Y)
-    print((tl_x, tl_y, w, h))
+#     send_data(X, Y)
+#     print((tl_x, tl_y, w, h))
 
 start = time.time_ns()
 
@@ -107,7 +111,7 @@ while True:
     # res = cv2.bitwise_and(frame, color_mask(frame))
     blurred = cv2.GaussianBlur(frame, (5, 5), 1)
        
-    _, rm = get_color_mask(blurred, 0)
+    _, rm = get_color_mask(blurred, 'green')
     
     p = apply_postprocessing(rm)
     
@@ -127,7 +131,7 @@ while True:
             # print(type(tl_x))
             draw_rectangle(frame, tl_x, tl_y, w, h)
             
-            target(tl_x, tl_y, w, h)
+            # target(tl_x, tl_y, w, h)
 
     cv2.imshow("Webcam",frame)
 

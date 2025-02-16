@@ -16,6 +16,7 @@
 
 # ignore training images (over 2k images)
 /webcam_images
+/*/*.jpg
 
 # ignore datasets (webcam images labeled on roboflow)
 /datasets

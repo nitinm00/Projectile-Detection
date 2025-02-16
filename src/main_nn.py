@@ -37,7 +37,6 @@ plat = platform.system()
 if plat == "Windows":
     port = "COM4"
 elif plat == "macOS":
-    # port = "/dev/tty.usbmodem6D8118A649481"
     port = "/dev/tty.usbmodem144101"
 elif plat == "Linux":
     port = "/dev/ttyUSB0"
