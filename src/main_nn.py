@@ -69,20 +69,21 @@ def target(tl_x, tl_y, br_x, br_y):
     cy = tl_y + (br_y - tl_y)/2
 
     X =  flip_orientation((cx/HORIZ_ASPECT)*180)
-    Y =  (cy/VERT_ASPECT)*180
+    Y =  flip_orientation((cy/VERT_ASPECT)*180)
 
     send_data(X, Y)
     # print(X,Y)
     
 while True:
+    start_loop = time.time_ns()
     ret, frame = cap.read()
 
     if not ret:
         print("could not read frame")
         break
 
-    # results = model(frame, device='0', verbose=False)
-    results = model(frame, device='0', verbose=True)
+    results = model(frame, device='0', verbose=False)
+    # results = model(frame, device='0', verbose=True)
 
     for result in results:
 
@@ -92,7 +93,9 @@ while True:
             
             box = result.boxes[0]
             
+            # before_list = time.time_ns()
             topleft_x_norm, topleft_y_norm, bottomright_x_norm, bottomright_y_norm = box.xyxyn[0].tolist()
+            # after_list = time.time_ns()
 
             # scale normalized values by actual image dimensions
             tl_x, br_x = int(topleft_x_norm * HORIZ_ASPECT), int(bottomright_x_norm * HORIZ_ASPECT)
@@ -104,6 +107,8 @@ while True:
             target(tl_x, tl_y, br_x, br_y)
 
     cv2.imshow("Webcam",frame)
-
+    end_loop = time.time_ns()
+    # print(f'processing time: {(end_loop - start_loop) / MS_TO_NS} ms')
     if cv2.waitKey(1) == ord('q'):
+        # print((after_list - before_list) / MS_TO_NS)
         break

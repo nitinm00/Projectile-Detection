@@ -1,5 +1,6 @@
 #include<Servo.h>
-
+#include<Wire.h>
+#include <Adafruit_PWMServoDriver.h>
 int servoPinX = A4;
 int servoPinY = A5;
 int laserPin = A7;
@@ -10,12 +11,13 @@ String serialData;
 
 void setup() {
 
-  serX.attach(servoPinX);
-  serY.attach(servoPinY);
-  pinMode(laserPin, OUTPUT);
+  // serX.attach(servoPinX);
+  // serY.attach(servoPinY);
+  // pinMode(laserPin, OUTPUT);
+  Wire.begin();
   Serial.begin(9600);
   Serial.setTimeout(10);
-  digitalWrite(laserPin, LOW);
+  // digitalWrite(laserPin, LOW);
 }
 
 void loop() {
@@ -23,7 +25,7 @@ void loop() {
 
 void serialEvent() {
   serialData = Serial.readString();
-  digitalWrite(laserPin, HIGH);
+  // digitalWrite(laserPin, HIGH);
   // if ( serialData.charAt(2) == 'Y') {
   //   i == 2;
   // } else if (serialData.charAt(3) == 'Y') {
