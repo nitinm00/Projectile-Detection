@@ -1,11 +1,12 @@
 import numpy as np
-import cv2
+import cv2 as cv
 import sys
 from pylibfreenect2 import Freenect2, SyncMultiFrameListener
 from pylibfreenect2 import FrameType, Registration, Frame
 from pylibfreenect2 import createConsoleLogger, setGlobalLogger
 from pylibfreenect2 import LoggerLevel
 import imutils
+from time import sleep
 
 try:
     from pylibfreenect2 import OpenGLPacketPipeline
@@ -57,8 +58,14 @@ bigdepth = Frame(1920, 1082, 4) if need_bigdepth else None
 color_depth_map = np.zeros((424, 512),  np.int32).ravel() \
     if need_color_depth_map else None
 
+COLOR_SIZE = [1920/3, 1080/3]
+DEPTH_IR_FRAME_SIZE = [512, 424]
+
 def draw_rectangle(frame, tl_x, tl_y, w, h):
-    cv2.rectangle(frame, (tl_x , tl_y) , (tl_x+ w, tl_y+h), (0, 255, 0), 2)
+    cv.rectangle(frame, (tl_x , tl_y) , (tl_x+ w, tl_y+h), (0, 255, 0), 2)
+
+def normalize_coordinates_tocolor(x, y):
+    return x * int(COLOR_SIZE[0] / DEPTH_IR_FRAME_SIZE[0]), y * int(COLOR_SIZE[1] / DEPTH_IR_FRAME_SIZE[1])
 
 def map_to_range(arr, old_min, old_max, new_min, new_max):
 
@@ -67,56 +74,70 @@ def map_to_range(arr, old_min, old_max, new_min, new_max):
 
     return mapped_arr
 
+def apply_postprocessing(mask):
+    
+    kernel = np.ones((2, 2), np.uint16)
+    
+    mask = cv.dilate(mask, kernel, iterations=1)
+    mask = cv.erode(mask, kernel,iterations=2) 
+    
+    return mask
+
 while True:
     frames = listener.waitForNewFrame()
 
-    color = frames["color"]
-    ir = frames["ir"]
-    depth = frames["depth"]
+    color_dsize = 2 ** 8
+    ir_dsize = 65535.
+    depth_dsize = 4500.
+    color = frames["color"].asarray()
+    ir = frames["ir"].asarray()
+    depth = frames["depth"].asarray()
     
-    registration.apply(color, depth, undistorted, registered,
-                       bigdepth=bigdepth,
-                       color_depth_map=color_depth_map)
+    # registration.apply(color, depth, undistorted, registered,
+    #                    bigdepth=bigdepth,
+    #                    color_depth_map=color_depth_map)
     
-    depthimg = depth.asarray() / 4500.
-    colorimg = cv2.resize(color.asarray(),
-                                   (int(1920 / 3), int(1080 / 3)))
+    # depthimg = depth / 4500.
+    # colorimg = cv2.resize(color,
+    #                                (int(1920 / 3), int(1080 / 3)))
     
-    grimg = cv2.cvtColor(colorimg, cv2.COLOR_BGR2GRAY)
+    ret, thresh = cv.threshold(ir / ir_dsize, 1. - (1 / ir_dsize), 1.0, cv.THRESH_BINARY)
+    processed_mask = apply_postprocessing(thresh)
+    thresh_8bit = np.array(processed_mask, dtype=np.uint8)
+    visible_markers = cv.findContours(thresh_8bit, cv.RETR_LIST,
+        cv.CHAIN_APPROX_SIMPLE)
+    contours = imutils.grab_contours(visible_markers)
+    
+    color_frame = cv.resize(color, (int(1920 / 3), int(1080 / 3)))
+    contours_poly = [None]*len(contours)
+    centers = [None]*len(contours)
+    radius = [None]*len(contours)
+    markers = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
+    ball = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
 
-    #---- Apply automatic Canny edge detection using the computed median----
+    if len(contours) > 0:
 
-    depth_8bit = np.array(depthimg * 255., dtype=np.uint8)
-    # print(depth_8bit)
-    # print("min 8bit:", np.min(depth_8bit))
-    # print("max 8bit:", np.max(depth_8bit))
-    v = np.median(depth_8bit)
-    sigma = 0.33
-    lower = int(max(0, (1.0 - sigma) * v))
-    upper = int(min(255, (1.0 + sigma) * v))
-    processed = cv2.medianBlur(depth_8bit, 11)
-    processed = cv2.Canny(processed, 5, 70, 3)
-    processed = cv2.blur(processed, (7, 7))
-    circles = cv2.HoughCircles(processed, cv2.HOUGH_GRADIENT,2,32,
-                                param1=30,param2=550,minRadius=0,maxRadius=30)
-    # edged_depth = cv2.Canny(depth_8bit, lower, upper)
-    # cv2.imshow('Edges',edged_depth)
-    cv2.imshow("edges", processed)
-    print(circles)
-    if circles is not None:
-        circles = np.uint16(np.around(circles))
-        for i in circles[0,:]:
-
-            # draw the outer circle
-            cv2.circle(colorimg,(i[0],i[1]),i[2],(0,255,0),2)
-
-            # draw the center of the circle
-            cv2.circle(colorimg,(i[0],i[1]),2,(0,0,255),3)
+        # get centers of markers and connect them to form full ball contour
+        # or go die and just use average positions of markers
+        for i, c in enumerate(contours):
+            contours_poly[i] = cv.approxPolyDP(c, 3, True)
+            centers[i], radius[i] = cv.minEnclosingCircle(contours_poly[i])
+            cv.circle(markers, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color=(0, 255, 0), thickness=2)
         
-    cv2.imshow("kinect depth", depthimg)
-    cv2.imshow("Kinect webcam", colorimg)
+        # create shape known as "ball"
+        if len(centers) > 0:
+            print(centers)
+            centers = np.array(centers, dtype=np.int32)
+            [x, y] = np.average(centers, axis=0)
+            avg_dist = np.average(np.array([np.sqrt((xcoord - x) ** 2 + (ycoord - y) ** 2) for (xcoord, ycoord) in centers], np.int32))
+            print(f"ball xy rad: {x}, {y}, {avg_dist}")
+            cv.circle(ball, (int(x), int(y)), int(avg_dist), (0, 0, 255), 2)
+
+    cv.imshow("thresholded img", processed_mask)
+    cv.imshow("markers", markers)
+    cv.imshow("ball", ball)
 
     listener.release(frames)
-    key = cv2.waitKey(delay=1)
+    key = cv.waitKey(delay=1)
     if key == ord('q'):
         break

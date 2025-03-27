@@ -111,7 +111,7 @@ while True:
     # res = cv2.bitwise_and(frame, color_mask(frame))
     blurred = cv2.GaussianBlur(frame, (5, 5), 1)
        
-    _, rm = get_color_mask(blurred, 'green')
+    _, rm = get_color_mask(blurred, 'red')
     
     p = apply_postprocessing(rm)
     
