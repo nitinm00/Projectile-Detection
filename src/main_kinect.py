@@ -83,15 +83,57 @@ def apply_postprocessing(mask):
     
     return mask
 
+def get():
+    
+    # idek
+    ret, thresh = cv.threshold(ir / ir_dsize, 1. - (1 / ir_dsize), 1.0, cv.THRESH_BINARY)
+    processed_mask = apply_postprocessing(thresh)
+    thresh_8bit = np.array(processed_mask, dtype=np.uint8)
+    visible_markers = cv.findContours(thresh_8bit, cv.RETR_LIST,
+        cv.CHAIN_APPROX_SIMPLE)
+    contours = imutils.grab_contours(visible_markers)
+    
+    # color_frame = cv.resize(color, (int(1920 / 3), int(1080 / 3)))
+    contours_poly = [None]*len(contours)
+    centers = np.zeros(shape=(len(contours), 2))
+    radius = np.zeros(shape=(len(contours)))
+    markers = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
+    ball = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
+
+    if len(contours) > 0:
+
+        # main program loop
+        
+        # get centers of markers and connect them to form full ball contour
+        # or go die and just use average positions of markers
+        for i, c in enumerate(contours):
+            contours_poly[i] = cv.approxPolyDP(c, 3, True)
+            centers[i], radius[i] = cv.minEnclosingCircle(contours_poly[i])
+            cv.circle(markers, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color=(0, 255, 0), thickness=2)
+        
+        # create shape known as "ball"
+        centers = np.array(centers, dtype=np.int32)
+        [x, y] = np.average(centers, axis=0)
+        avg_dist = np.average(np.array(list(map(lambda coords: 
+            np.sqrt((coords[0] - x) ** 2 + (coords[1] - y) ** 2), centers
+        ))))
+        cv.circle(ball, (int(x), int(y)), int(avg_dist), (0, 0, 255), 2)
+
+def sample():
+    for _ in range(10):
+        frames = listener.waitForNewFrame()
+        ir = frames["ir"].asarray()
+
+
 while True:
     frames = listener.waitForNewFrame()
 
     color_dsize = 2 ** 8
     ir_dsize = 65535.
     depth_dsize = 4500.
-    color = frames["color"].asarray()
+    # color = frames["color"].asarray()
     ir = frames["ir"].asarray()
-    depth = frames["depth"].asarray()
+    # depth = frames["depth"].asarray()
     
     # registration.apply(color, depth, undistorted, registered,
     #                    bigdepth=bigdepth,
@@ -108,15 +150,17 @@ while True:
         cv.CHAIN_APPROX_SIMPLE)
     contours = imutils.grab_contours(visible_markers)
     
-    color_frame = cv.resize(color, (int(1920 / 3), int(1080 / 3)))
+    # color_frame = cv.resize(color, (int(1920 / 3), int(1080 / 3)))
     contours_poly = [None]*len(contours)
-    centers = [None]*len(contours)
-    radius = [None]*len(contours)
+    centers = np.zeros(shape=(len(contours), 2))
+    radius = np.zeros(shape=(len(contours)))
     markers = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
     ball = np.zeros((thresh_8bit.shape[0], thresh_8bit.shape[1], 3), dtype=np.uint8)
 
     if len(contours) > 0:
 
+        # main program loop
+        
         # get centers of markers and connect them to form full ball contour
         # or go die and just use average positions of markers
         for i, c in enumerate(contours):
@@ -125,15 +169,15 @@ while True:
             cv.circle(markers, (int(centers[i][0]), int(centers[i][1])), int(radius[i]), color=(0, 255, 0), thickness=2)
         
         # create shape known as "ball"
-        if len(centers) > 0:
-            print(centers)
-            centers = np.array(centers, dtype=np.int32)
-            [x, y] = np.average(centers, axis=0)
-            avg_dist = np.average(np.array([np.sqrt((xcoord - x) ** 2 + (ycoord - y) ** 2) for (xcoord, ycoord) in centers], np.int32))
-            print(f"ball xy rad: {x}, {y}, {avg_dist}")
-            cv.circle(ball, (int(x), int(y)), int(avg_dist), (0, 0, 255), 2)
-
-    cv.imshow("thresholded img", processed_mask)
+        centers = np.array(centers, dtype=np.int32)
+        [x, y] = np.average(centers, axis=0)
+        avg_dist = np.average(np.array(list(map(lambda coords: 
+            np.sqrt((coords[0] - x) ** 2 + (coords[1] - y) ** 2), centers
+        ))))
+        cv.circle(ball, (int(x), int(y)), int(avg_dist), (0, 0, 255), 2)
+        
+        motion_study = sample()
+    # cv.imshow("thresholded img", processed_mask)
     cv.imshow("markers", markers)
     cv.imshow("ball", ball)
 
